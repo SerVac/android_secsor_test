@@ -14,13 +14,12 @@ import android.view.View;
 import android.widget.Button;
 
 import java.io.BufferedInputStream;
-import java.security.AccessControlContext;
-import java.security.AccessController;
-import java.util.List;
+import java.io.IOException;
 
 
 public class MainActivity extends Activity implements SensorEventListener {
-    private static final String TAG = "MyLog";
+    public static final String TAG = "MyLog";
+
     private static final int START_BTN_TAG = R.id.start_btn;
     private static final int STOP_BTN_TAG = R.id.stop_btn;
 
@@ -32,20 +31,27 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private BufferedInputStream bufferedInputStream;
 
+    private String fileName = "testFile.txt";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-
 
         startBtn = (Button) findViewById(START_BTN_TAG);
         stopBtn = (Button) findViewById(STOP_BTN_TAG);
         stopBtn.setEnabled(false);
 
         mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null) {
+            mSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            Log.d(TAG, "Accelerometer is OK!");
+        } else {
+            Log.d(TAG, "there are no accelerometers on your device!");
+        }
 
-        if (mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY) != null) {
+
+       /* if (mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY) != null) {
             List<Sensor> gravSensors = mSensorManager.getSensorList(Sensor.TYPE_GRAVITY);
             for (int i = 0; i < gravSensors.size(); i++) {
                 if ((gravSensors.get(i).getVendor().contains("Google Inc.")) &&
@@ -63,8 +69,10 @@ public class MainActivity extends Activity implements SensorEventListener {
                 Log.d(TAG, "there are no accelerometers on your device!");
             }
         }
-
+*/
+        FileUtil.createDefaultPathFile(fileName);
         onPause();
+
     }
 
     @Override
@@ -72,9 +80,39 @@ public class MainActivity extends Activity implements SensorEventListener {
         // Do something here if sensor accuracy changes.
     }
 
+    private static final int MAX_BUFFER_SIZE = 1000;
+    StringBuffer buffer = new StringBuffer();
+
+    private boolean initKey = false;
+    private int bufferOverflowCounter = 0;
+
     @Override
     public final void onSensorChanged(SensorEvent event) {
-        String str = arrayToString(event.values);
+        if (sensorIsActivate) {
+            int length = buffer.length();
+            String str = arrayToString(event.values);
+            buffer.append(str);
+            if (buffer.length() >= MAX_BUFFER_SIZE) try {
+                buffer.append("\n");
+                FileUtil.write(FileUtil.filesMap.get(fileName), buffer.toString());
+                buffer.setLength(0);
+
+            } catch (IOException e) {
+                Log.w(TAG, "Buffer may overflow! " + e.getMessage());
+                e.printStackTrace();
+
+                bufferOverflowCounter++;
+                if (bufferOverflowCounter > 3) try {
+                    IOException err = new IOException("Buffer is overflow!");
+                    Log.e(TAG, err.getMessage());
+                    throw err;
+                } catch (IOException e1) {
+                    Log.e(TAG, e1.getMessage());
+                    e1.printStackTrace();
+                }
+            }
+        }
+
 //        Log.d(TAG, "acceler: " + arrayToString(event.values));
     }
 
@@ -82,9 +120,9 @@ public class MainActivity extends Activity implements SensorEventListener {
         StringBuffer stringBuffer = new StringBuffer();
         stringBuffer.append("[");
         for (int i = 0; i < values.length; i++) {
-            stringBuffer.append(values[i] + "; ");
+            stringBuffer.append(values[i] + ";");
         }
-        stringBuffer.setLength(stringBuffer.length()-2);
+        stringBuffer.setLength(stringBuffer.length() - 1);
         stringBuffer.append("]");
         return stringBuffer.toString();
     }
@@ -123,18 +161,22 @@ public class MainActivity extends Activity implements SensorEventListener {
         return super.onOptionsItemSelected(item);
     }
 
+    private boolean sensorIsActivate = false;
+
     public void onClick(View v) {
 //        Log.d(TAG, "Clicked 2: " + view.getId());
         switch (v.getId()) {
             case START_BTN_TAG:
+                sensorIsActivate = true;
                 onResume();
-                FileUtil.write("TEST TEST TEST!");
+                stopBtn.setEnabled(sensorIsActivate);
 
-                stopBtn.setEnabled(true);
                 break;
             case STOP_BTN_TAG:
+                sensorIsActivate = false;
                 onPause();
-                stopBtn.setEnabled(false);
+                stopBtn.setEnabled(sensorIsActivate);
+
                 break;
 
         }
