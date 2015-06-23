@@ -1,1 +1,1 @@
-# android_secsor_test
+# android_sensor_test
